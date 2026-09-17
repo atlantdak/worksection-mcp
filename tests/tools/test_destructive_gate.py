@@ -56,3 +56,16 @@ async def test_delete_comment_is_listed_when_explicitly_enabled() -> None:
     context, _ = make_context([], allow_destructive_operations=True)
     names = {item.name for item in await list_tools_payload(context)}
     assert "delete_comment" in names
+
+
+async def test_delete_costs_is_absent_from_the_tool_list_by_default() -> None:
+    context, _ = make_context([])
+    names = {item.name for item in await list_tools_payload(context)}
+    assert "delete_costs" not in names
+    assert "get_costs" in names
+
+
+async def test_delete_costs_is_listed_when_explicitly_enabled() -> None:
+    context, _ = make_context([], allow_destructive_operations=True)
+    names = {item.name for item in await list_tools_payload(context)}
+    assert "delete_costs" in names
