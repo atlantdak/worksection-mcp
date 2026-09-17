@@ -26,6 +26,10 @@ def test_as_rows_handles_none_and_scalars() -> None:
     assert as_rows("oops") == []
 
 
+def test_as_rows_treats_an_empty_mapping_as_no_rows() -> None:
+    assert as_rows({}) == []
+
+
 def test_filter_by_status() -> None:
     assert [row["id"] for row in filter_tasks(ROWS, status="done")] == [2, 3]
 

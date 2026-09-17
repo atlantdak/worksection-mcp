@@ -35,6 +35,18 @@ async def test_get_all_tasks_filters_by_assignee() -> None:
     assert [row["id"] for row in result] == [2]
 
 
+async def test_get_all_tasks_returns_empty_list_for_an_empty_object_payload() -> None:
+    context, _ = make_context([{"status": "ok", "data": {}}])
+    result: Any = await dispatch(context, "get_all_tasks", {})
+    assert result == []
+
+
+async def test_get_tasks_returns_empty_list_for_an_empty_object_payload() -> None:
+    context, _ = make_context([{"status": "ok", "data": {}}])
+    result: Any = await dispatch(context, "get_tasks", {"project_id": 7})
+    assert result == []
+
+
 async def test_get_tasks_scopes_to_a_project() -> None:
     context, requests = make_context([{"status": "ok", "data": []}])
     await dispatch(context, "get_tasks", {"project_id": 7})

@@ -17,6 +17,10 @@ def as_rows(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, list):
         return [row for row in payload if isinstance(row, dict)]
     if isinstance(payload, Mapping):
+        if not payload:
+            # The API represents an empty result set as `{}` as often as `[]`;
+            # treat both the same rather than surfacing a single bogus row.
+            return []
         values = list(payload.values())
         if values and all(isinstance(value, Mapping) for value in values):
             return [dict(value) for value in values]
