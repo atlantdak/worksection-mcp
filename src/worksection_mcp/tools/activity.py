@@ -8,7 +8,13 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from worksection_mcp import api_actions
-from worksection_mcp.analytics import HIGH_PRIORITY, NORMAL_PRIORITY, overdue_tasks, summarise_tasks
+from worksection_mcp.analytics import (
+    HIGH_PRIORITY,
+    NORMAL_PRIORITY,
+    overdue_tasks,
+    summarise_tasks,
+    to_float,
+)
 from worksection_mcp.filtering import as_rows
 from worksection_mcp.pages import account_page, project_page
 from worksection_mcp.tooling import ToolContext, tool
@@ -36,10 +42,7 @@ async def _fetch_tasks(context: ToolContext, project_id: int | None) -> list[dic
 
 
 def _priority_bucket(value: Any) -> str:
-    try:
-        priority = float(value or 0)
-    except (TypeError, ValueError):
-        priority = 0.0
+    priority = to_float(value)
     if priority >= HIGH_PRIORITY:
         return "high"
     if priority >= NORMAL_PRIORITY:
