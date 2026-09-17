@@ -43,3 +43,21 @@ def test_readme_covers_both_auth_modes_and_the_safety_flag() -> None:
         "127.0.0.1:18030",
     ):
         assert topic in readme
+
+
+def test_security_policy_describes_the_threat_model() -> None:
+    text = (REPO_ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    for topic in (
+        "stdio",
+        "127.0.0.1",
+        "ALLOW_DESTRUCTIVE_OPERATIONS",
+        "prompt injection",
+        "Reporting",
+    ):
+        assert topic in text
+
+
+def test_license_is_mit() -> None:
+    text = (REPO_ROOT / "LICENSE").read_text(encoding="utf-8")
+    assert "MIT License" in text
+    assert "WITHOUT WARRANTY OF ANY KIND" in text
