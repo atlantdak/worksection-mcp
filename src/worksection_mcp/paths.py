@@ -30,6 +30,10 @@ def resolve_within_workspace(name: str, workspace: Path | None) -> Path:
     if any(part == ".." for part in candidate.parts):
         raise PathNotAllowedError("file name must not contain '..'")
 
+    if not workspace.is_dir():
+        raise PathNotAllowedError(
+            f"the configured workspace directory {str(workspace)!r} does not exist"
+        )
     root = workspace.resolve(strict=True)
     resolved = (root / candidate).resolve()
     if not resolved.is_relative_to(root):

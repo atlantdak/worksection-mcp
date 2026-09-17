@@ -43,6 +43,12 @@ def test_rejects_when_no_workspace_is_configured() -> None:
         resolve_within_workspace("ok.txt", None)
 
 
+def test_rejects_a_workspace_directory_that_does_not_exist(tmp_path: Path) -> None:
+    missing = tmp_path / "does-not-exist"
+    with pytest.raises(PathNotAllowedError):
+        resolve_within_workspace("ok.txt", missing)
+
+
 def test_rejects_a_missing_file(workspace: Path) -> None:
     with pytest.raises(PathNotAllowedError):
         resolve_within_workspace("nope.txt", workspace)
