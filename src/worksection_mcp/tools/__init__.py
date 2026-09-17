@@ -9,6 +9,7 @@ from __future__ import annotations
 from worksection_mcp.tools import (
     comments,
     costs,
+    files,
     members,
     projects,
     reports,
@@ -22,6 +23,7 @@ from worksection_mcp.tools import (
 __all__ = [
     "comments",
     "costs",
+    "files",
     "members",
     "projects",
     "reports",
