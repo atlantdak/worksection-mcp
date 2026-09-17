@@ -12,6 +12,7 @@ from mcp.server.stdio import stdio_server
 
 from worksection_mcp import __version__, tools  # noqa: F401 - import registers tools
 from worksection_mcp.auth.factory import build_auth_provider
+from worksection_mcp.cache.file_cache import FileCache
 from worksection_mcp.cache.session_cache import SessionCache
 from worksection_mcp.config import Settings, load_settings
 from worksection_mcp.errors import WorksectionError
@@ -89,7 +90,14 @@ async def create_context(settings: Settings) -> ToolContext:
     auth = build_auth_provider(settings)
     cache = SessionCache(settings.cache_ttl_seconds if settings.cache_enabled else 0)
     client = WorksectionClient(settings, auth, cache=cache)
-    return ToolContext(settings=settings, client=client, auth=auth, cache=cache)
+    file_cache = FileCache(
+        settings.file_cache_dir,
+        ttl_seconds=settings.cache_ttl_seconds if settings.cache_enabled else 0,
+        max_bytes=settings.file_cache_max_bytes,
+    )
+    return ToolContext(
+        settings=settings, client=client, auth=auth, cache=cache, file_cache=file_cache
+    )
 
 
 async def run_stdio(settings: Settings | None = None) -> None:

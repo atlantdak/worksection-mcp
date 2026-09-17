@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from worksection_mcp import api_actions
+from worksection_mcp.cache.file_cache import file_cache_key
 from worksection_mcp.filtering import as_rows
 from worksection_mcp.pages import task_page
 from worksection_mcp.paths import list_workspace_files as _list_workspace_files
@@ -82,7 +83,17 @@ async def download_file(context: ToolContext, args: DownloadFileInput) -> dict[s
     if not url.startswith("https://"):
         return {"found": False, "detail": "attachment has no downloadable https URL"}
 
-    content = await context.client.download(url)
+    key = file_cache_key(url)
+    cached = context.file_cache.get(key) if context.file_cache else None
+    if cached is not None:
+        content = cached
+        from_cache = True
+    else:
+        content = await context.client.download(url)
+        from_cache = False
+        if context.file_cache is not None:
+            context.file_cache.put(key, content)
+
     if len(content) > args.max_bytes:
         return {
             "found": True,
@@ -91,6 +102,7 @@ async def download_file(context: ToolContext, args: DownloadFileInput) -> dict[s
             "size_bytes": len(content),
             "content_base64": "",
             "detail": f"file is {len(content)} bytes, above the {args.max_bytes} byte limit",
+            "from_cache": from_cache,
         }
     return {
         "found": True,
@@ -98,6 +110,7 @@ async def download_file(context: ToolContext, args: DownloadFileInput) -> dict[s
         "filename": attachment.get("title"),
         "size_bytes": len(content),
         "content_base64": base64.b64encode(content).decode("ascii"),
+        "from_cache": from_cache,
     }
 
 
