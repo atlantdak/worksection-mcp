@@ -8,14 +8,17 @@ reports names relative to the single configured directory.
 from __future__ import annotations
 
 import base64
+import binascii
+from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from worksection_mcp import api_actions
 from worksection_mcp.filtering import as_rows
 from worksection_mcp.pages import task_page
 from worksection_mcp.paths import list_workspace_files as _list_workspace_files
+from worksection_mcp.paths import resolve_within_workspace
 from worksection_mcp.tooling import ToolContext, tool
 
 DEFAULT_MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024
@@ -113,3 +116,77 @@ async def list_workspace_files(context: ToolContext, _args: NoArguments) -> dict
         "workspace": str(workspace) if workspace else None,
         "files": _list_workspace_files(workspace),
     }
+
+
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+DEFAULT_CONTENT_TYPE = "application/octet-stream"
+
+
+class UploadFileInput(BaseModel):
+    project_id: int = Field(gt=0, description="Project the task belongs to.")
+    task_id: int = Field(gt=0, description="Task to attach the file to.")
+    filename: str | None = Field(
+        default=None,
+        description="Name to store the file under. Required with content_base64.",
+    )
+    content_base64: str | None = Field(default=None, description="File content, base64 encoded.")
+    workspace_filename: str | None = Field(
+        default=None,
+        description=(
+            "Name of a file inside FILE_WORKSPACE_DIR, relative to it. Absolute paths, "
+            "'..' segments and symlinks are rejected."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> UploadFileInput:
+        inline = self.content_base64 is not None
+        from_workspace = self.workspace_filename is not None
+        if inline == from_workspace:
+            raise ValueError(
+                "upload_file needs exactly one of content_base64 (with filename) or "
+                "workspace_filename"
+            )
+        if inline:
+            if not self.filename:
+                raise ValueError("filename is required when content_base64 is given")
+            if Path(self.filename).name != self.filename:
+                raise ValueError("filename must not contain a directory component")
+            try:
+                decoded = base64.b64decode(self.content_base64 or "", validate=True)
+            except (binascii.Error, ValueError) as exc:
+                raise ValueError("content_base64 is not valid base64") from exc
+            if not decoded:
+                raise ValueError("content_base64 decoded to zero bytes")
+            if len(decoded) > MAX_UPLOAD_BYTES:
+                raise ValueError(f"file exceeds the {MAX_UPLOAD_BYTES} byte upload limit")
+        return self
+
+
+@tool(
+    name="upload_file",
+    description=(
+        "Attach a file to a task. Provide the content inline as base64, or name a file "
+        "inside the configured workspace directory. Arbitrary filesystem paths are rejected."
+    ),
+    input_model=UploadFileInput,
+)
+async def upload_file(context: ToolContext, args: UploadFileInput) -> Any:
+    if args.content_base64 is not None:
+        name = args.filename or "upload.bin"
+        content = base64.b64decode(args.content_base64, validate=True)
+    else:
+        resolved = resolve_within_workspace(
+            args.workspace_filename or "", context.settings.file_workspace_dir
+        )
+        content = resolved.read_bytes()
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise ValueError(f"file exceeds the {MAX_UPLOAD_BYTES} byte upload limit")
+        name = args.filename or resolved.name
+
+    return await context.client.call(
+        api_actions.UPLOAD_FILE,
+        page=task_page(args.project_id, args.task_id),
+        method="POST",
+        files={"attach": (name, content, DEFAULT_CONTENT_TYPE)},
+    )
