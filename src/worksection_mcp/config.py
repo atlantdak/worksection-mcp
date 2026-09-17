@@ -44,7 +44,9 @@ class Settings(BaseSettings):
     oauth_token_url: str = "https://worksection.com/oauth2/token"  # noqa: S105 (URL, not a secret)
     oauth_api_base_url: str = "https://worksection.com/api/oauth2/"
     oauth_scope: str = "all"
-    oauth_redirect_port: int = Field(default=18030, ge=1024, le=65535)
+    # 0 asks the operating system for a free ephemeral port, which is useful
+    # in tests that must not collide with a fixed port across parallel runs.
+    oauth_redirect_port: int = Field(default=18030, ge=0, le=65535)
     fernet_key: SecretStr | None = None
 
     state_dir: Path = Path.home() / ".worksection-mcp"

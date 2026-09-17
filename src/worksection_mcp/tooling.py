@@ -17,6 +17,7 @@ from worksection_mcp.config import Settings
 from worksection_mcp.errors import DestructiveOperationDisabled
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
+    from worksection_mcp.auth.base import AuthProvider
     from worksection_mcp.http.client import WorksectionClient
 
 
@@ -26,6 +27,7 @@ class ToolContext:
 
     settings: Settings
     client: WorksectionClient
+    auth: AuthProvider | None = None
 
 
 ToolHandler: TypeAlias = Callable[[ToolContext, Any], Awaitable[Any]]
