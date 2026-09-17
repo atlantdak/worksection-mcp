@@ -11,7 +11,7 @@ import hashlib
 from collections.abc import Mapping
 
 from worksection_mcp.auth.base import PreparedRequest
-from worksection_mcp.config import Settings
+from worksection_mcp.config import ACCOUNT_SLUG_RE, Settings
 from worksection_mcp.errors import ConfigurationError
 
 
@@ -29,6 +29,11 @@ class AdminKeyAuth:
     def __init__(self, account: str, api_key: str) -> None:
         if not account:
             raise ConfigurationError("admin_key mode requires WORKSECTION_ACCOUNT")
+        if not ACCOUNT_SLUG_RE.match(account):
+            raise ConfigurationError(
+                "account must be a bare Worksection account slug, for example 'acme' "
+                "(not a hostname, path, or URL)"
+            )
         if not api_key:
             raise ConfigurationError("admin_key mode requires WORKSECTION_API_KEY")
         self.account = account

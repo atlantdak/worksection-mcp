@@ -60,6 +60,16 @@ def test_build_admin_auth_reads_settings() -> None:
     assert auth.account == "acme"
 
 
+def test_rejects_an_account_with_a_slash() -> None:
+    with pytest.raises(ConfigurationError):
+        AdminKeyAuth(account="evil.com/../attacker", api_key="APIKEY")
+
+
+def test_rejects_an_uppercase_account() -> None:
+    with pytest.raises(ConfigurationError):
+        AdminKeyAuth(account="ACME", api_key="APIKEY")
+
+
 def test_build_admin_auth_rejects_oauth_settings() -> None:
     settings = load_settings(
         auth_mode="oauth",
