@@ -12,6 +12,7 @@ from mcp.server.stdio import stdio_server
 
 from worksection_mcp import __version__, tools  # noqa: F401 - import registers tools
 from worksection_mcp.auth.factory import build_auth_provider
+from worksection_mcp.cache.session_cache import SessionCache
 from worksection_mcp.config import Settings, load_settings
 from worksection_mcp.errors import WorksectionError
 from worksection_mcp.http.client import WorksectionClient
@@ -86,8 +87,9 @@ def build_server(context: ToolContext) -> Server[Any]:
 async def create_context(settings: Settings) -> ToolContext:
     """Build the runtime context for the configured auth mode."""
     auth = build_auth_provider(settings)
-    client = WorksectionClient(settings, auth)
-    return ToolContext(settings=settings, client=client, auth=auth)
+    cache = SessionCache(settings.cache_ttl_seconds if settings.cache_enabled else 0)
+    client = WorksectionClient(settings, auth, cache=cache)
+    return ToolContext(settings=settings, client=client, auth=auth, cache=cache)
 
 
 async def run_stdio(settings: Settings | None = None) -> None:

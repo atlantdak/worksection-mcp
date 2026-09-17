@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from worksection_mcp.auth.base import AuthProvider
+from worksection_mcp.cache.session_cache import SessionCache, cache_key
 from worksection_mcp.config import Settings
 from worksection_mcp.errors import (
     AuthenticationError,
@@ -26,6 +27,7 @@ from worksection_mcp.logging_setup import get_logger
 logger = get_logger("http.client")
 
 OK_STATUSES = frozenset({"ok", "success"})
+READ_ACTION_PREFIX = "get_"
 
 
 def extract_payload(body: Mapping[str, Any], action: str) -> Any:
@@ -63,6 +65,7 @@ class WorksectionClient:
         http: httpx.AsyncClient | None = None,
         limiter: AdaptiveRateLimiter | None = None,
         sleeper: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        cache: SessionCache | None = None,
     ) -> None:
         self._settings = settings
         self._auth = auth
@@ -74,6 +77,7 @@ class WorksectionClient:
         )
         self._limiter = limiter or AdaptiveRateLimiter(settings.rate_limit_rps)
         self._sleep = sleeper
+        self._cache = cache
 
     async def __aenter__(self) -> WorksectionClient:
         return self
@@ -101,6 +105,13 @@ class WorksectionClient:
     ) -> Any:
         """Issue one API action and return its unwrapped payload."""
         flat = normalize_params(params)
+        is_read = action.startswith(READ_ACTION_PREFIX)
+        key = cache_key(action, page, flat)
+        if is_read and self._cache is not None:
+            cached = self._cache.get(key)
+            if cached is not None:
+                logger.debug("cache hit for %s", action)
+                return cached
         attempts = self._settings.max_retries + 1
         last_error: BaseException | None = None
 
@@ -115,7 +126,13 @@ class WorksectionClient:
                     headers=prepared.headers,
                     files=files,
                 )
-                return self._handle_response(response, action)
+                result = self._handle_response(response, action)
+                if self._cache is not None:
+                    if is_read:
+                        self._cache.set(key, result)
+                    else:
+                        self._cache.invalidate_all()
+                return result
             except Exception as exc:
                 last_error = exc
                 if not is_retryable(exc) or attempt == attempts - 1:
