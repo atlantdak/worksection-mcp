@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import date
 from typing import Any
+
+from worksection_mcp.filtering import parse_wire_date
 
 HIGH_PRIORITY = 7
 NORMAL_PRIORITY = 1
@@ -85,6 +88,21 @@ def summarise_tasks(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "by_priority": by_priority,
         "unassigned": unassigned,
     }
+
+
+def overdue_tasks(rows: Sequence[Mapping[str, Any]], today: date) -> list[dict[str, Any]]:
+    """Open tasks whose due date has passed, most overdue first."""
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("status", "")).lower() == "done":
+            continue
+        due = parse_wire_date(row.get("date_end"))
+        if due is None or due >= today:
+            continue
+        enriched = dict(row)
+        enriched["days_overdue"] = (today - due).days
+        result.append(enriched)
+    return sorted(result, key=lambda item: int(item["days_overdue"]), reverse=True)
 
 
 def group_tasks_by_assignee(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:

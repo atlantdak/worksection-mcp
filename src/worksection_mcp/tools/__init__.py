@@ -7,6 +7,7 @@ sync when adding a module, and keep the imports alphabetical.
 from __future__ import annotations
 
 from worksection_mcp.tools import (
+    activity,
     auth_tools,
     comments,
     costs,
@@ -23,6 +24,7 @@ from worksection_mcp.tools import (
 )
 
 __all__ = [
+    "activity",
     "auth_tools",
     "comments",
     "costs",
