@@ -24,9 +24,9 @@ account large enough to hit an internal cap, if one exists.
 
 ## Status filtering combined with a project scope
 
-The plan for this server documented a report that filtering by status while
-also scoping to a project can return rows that do not match the requested
-status. Every listing tool (`get_all_tasks`, `get_tasks`, `search_tasks`,
+There is a documented report that filtering by status while also scoping to
+a project can return rows that do not match the requested status. Every
+listing tool (`get_all_tasks`, `get_tasks`, `search_tasks`,
 `get_tasks_by_status`, `get_tasks_by_priority`, `get_overdue_tasks`)
 therefore re-applies status (and, where relevant, assignee, text, priority
 and due-date) filters locally in `filtering.filter_tasks`, so the result is
@@ -96,13 +96,12 @@ response from the API.
 ## Verification status
 
 Nothing in this document has been checked against a live call to the
-Worksection API. Two points in this project's task list called for an
-optional manual smoke check against a real account — a `health_check` round
-trip after the first project tools were built, and an OAuth browser login
-after the auth tools were built — and both were deferred in the absence of
-real Worksection credentials in the development environment. Everything
-below was implemented from the plan's recorded assumptions and exercised
-only against a mocked HTTP transport in the test suite.
+Worksection API. The health-check round trip and the OAuth login flow each
+have a documented manual smoke-check step for running them against a real
+account, and both were deferred in this project because no live
+Worksection credentials were available in the development environment.
+Everything below was implemented from recorded assumptions about the API
+and exercised only against a mocked HTTP transport in the test suite.
 
 | Area | How it was checked |
 |---|---|
@@ -112,8 +111,8 @@ only against a mocked HTTP transport in the test suite.
 | Rate limiting (429 handling, backoff) | Not checked against real throttling; the limiter and retry path are unit tested against a scripted transport. |
 | Admin-key request signing | Not checked against a live response; the hash formula matches the published API documentation. |
 | Response envelope shape | Not checked against a live response; both known shapes are covered by mocked-transport tests. |
-| `health_check` tool round trip | Deferred manual smoke check (documented in the Task 12 implementation notes); never run against a live account. |
-| OAuth browser login | Deferred manual smoke check (documented in the Task 32 implementation notes); never run against a live account. |
+| `health_check` tool round trip | Deferred manual smoke check; never run against a live account. |
+| OAuth browser login | Deferred manual smoke check; never run against a live account. |
 
 If this server is ever run against a real Worksection account, the entries
 above are the first things to re-verify, in roughly this order: response
