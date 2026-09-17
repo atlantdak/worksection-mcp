@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
+import worksection_mcp.tooling as tooling
 from worksection_mcp.config import Settings, load_settings
 from worksection_mcp.errors import DestructiveOperationDisabled
 from worksection_mcp.tooling import (
@@ -24,9 +25,13 @@ class EchoInput(BaseModel):
 
 @pytest.fixture(autouse=True)
 def _clean_registry() -> Any:
+    # Swap the shared registry out for a scratch one, rather than wiping it,
+    # so tools registered by other modules survive this test file's run.
+    previous = dict(tooling._REGISTRY)
     clear_registry()
     yield
     clear_registry()
+    tooling._REGISTRY.update(previous)
 
 
 def _settings(**overrides: object) -> Settings:
