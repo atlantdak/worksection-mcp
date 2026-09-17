@@ -204,3 +204,33 @@ async def reopen_task(context: ToolContext, args: TaskRefInput) -> Any:
     return await context.client.call(
         api_actions.REOPEN_TASK, page=task_page(args.project_id, args.task_id)
     )
+
+
+class DeleteTaskInput(BaseModel):
+    project_id: int = Field(gt=0, description="Project the task belongs to.")
+    task_id: int = Field(gt=0, description="Task to delete permanently.")
+    confirm: bool = Field(
+        default=False,
+        description="Must be true. A second, explicit acknowledgement that this is permanent.",
+    )
+
+    @model_validator(mode="after")
+    def _require_confirmation(self) -> DeleteTaskInput:
+        if not self.confirm:
+            raise ValueError("delete_task requires confirm=true")
+        return self
+
+
+@tool(
+    name="delete_task",
+    description=(
+        "Permanently delete a task. Only available when ALLOW_DESTRUCTIVE_OPERATIONS=true, "
+        "and requires confirm=true."
+    ),
+    input_model=DeleteTaskInput,
+    destructive=True,
+)
+async def delete_task(context: ToolContext, args: DeleteTaskInput) -> Any:
+    return await context.client.call(
+        api_actions.DELETE_TASK, page=task_page(args.project_id, args.task_id)
+    )
