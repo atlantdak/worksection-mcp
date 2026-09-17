@@ -46,6 +46,19 @@ async def test_update_project_requires_a_change() -> None:
         await dispatch(context, "update_project", {"project_id": 42})
 
 
+async def test_update_project_rejects_a_whitespace_only_title() -> None:
+    context, _ = make_context([])
+    with pytest.raises(ValidationError):
+        await dispatch(context, "update_project", {"project_id": 42, "title": "   "})
+
+
+async def test_update_project_allows_an_omitted_title() -> None:
+    context, requests = make_context([{"status": "ok"}])
+    await dispatch(context, "update_project", {"project_id": 42, "text": "Updated scope"})
+    assert "title" not in requests[0].url.params
+    assert requests[0].url.params["text"] == "Updated scope"
+
+
 async def test_archive_and_activate_use_their_actions() -> None:
     context, requests = make_context([{"status": "ok"}, {"status": "ok"}])
     await dispatch(context, "archive_project", {"project_id": 42})
