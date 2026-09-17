@@ -124,6 +124,12 @@ class UpdateTaskInput(BaseModel):
     priority: int | None = Field(default=None, ge=0, le=10, description="New priority.")
 
     @model_validator(mode="after")
+    def _check_title(self) -> UpdateTaskInput:
+        if self.title is not None:
+            object.__setattr__(self, "title", require_text(self.title, "title", max_length=500))
+        return self
+
+    @model_validator(mode="after")
     def _require_a_change(self) -> UpdateTaskInput:
         changes = (self.title, self.text, self.assignee_email, self.start_date, self.due_date)
         if all(value is None for value in changes) and self.priority is None:

@@ -81,6 +81,19 @@ async def test_update_task_requires_at_least_one_change() -> None:
         await dispatch(context, "update_task", {"project_id": 7, "task_id": 55})
 
 
+async def test_update_task_rejects_a_whitespace_only_title() -> None:
+    context, _ = make_context([])
+    with pytest.raises(ValidationError):
+        await dispatch(context, "update_task", {"project_id": 7, "task_id": 55, "title": "   "})
+
+
+async def test_update_task_allows_an_omitted_title() -> None:
+    context, requests = make_context([{"status": "ok"}])
+    await dispatch(context, "update_task", {"project_id": 7, "task_id": 55, "priority": 3})
+    assert "title" not in requests[0].url.params
+    assert requests[0].url.params["priority"] == "3"
+
+
 async def test_complete_and_reopen_use_their_actions() -> None:
     context, requests = make_context([{"status": "ok"}, {"status": "ok"}])
     await dispatch(context, "complete_task", {"project_id": 7, "task_id": 55})
