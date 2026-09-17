@@ -64,6 +64,68 @@ def test_unknown_key_is_rejected(tmp_path: Path) -> None:
         _offloader(tmp_path).read_chunk("nope", 0)
 
 
+@pytest.mark.parametrize(
+    "hostile_key",
+    [
+        "../../../../etc/passwd",
+        "/etc/passwd",
+        "abc/../../secret",
+        "a" * 32 + "/../x",
+        "..\\..\\windows\\win.ini",
+    ],
+)
+def test_malformed_offload_keys_are_rejected(tmp_path: Path, hostile_key: str) -> None:
+    """A key must be a bare 32-char uuid4 hex string, never a path fragment."""
+    offloader = _offloader(tmp_path)
+    with pytest.raises(OffloadNotFoundError):
+        offloader.read_chunk(hostile_key, 0)
+    with pytest.raises(OffloadNotFoundError):
+        offloader.get_record(hostile_key)
+
+
+def test_a_traversal_key_cannot_reach_a_file_planted_at_its_target(tmp_path: Path) -> None:
+    """The key gate must reject a traversal string even when it would resolve.
+
+    A key of ``"../victim"`` builds a payload/meta path one directory above
+    the offload directory. To prove the gate - not just a missing-file
+    accident - is what stops this, a real victim file is planted at exactly
+    that resolved location, with genuine secret content and a well-formed
+    meta document. If the 32-hex-char shape check in
+    ``_require_valid_key`` were ever weakened or removed, this call would
+    succeed and return the victim's contents instead of raising.
+    """
+    offload_dir = tmp_path / "offload"
+    offload_dir.mkdir()
+    hostile_key = "../victim"
+
+    victim_meta = tmp_path / "victim.meta.json"
+    victim_meta.write_text(
+        json.dumps(
+            {
+                "key": hostile_key,
+                "size_bytes": 6,
+                "total_chunks": 1,
+                "created_at": 0.0,
+                "preview": "leaked",
+                "chunk_byte_offsets": [0, 6],
+            }
+        ),
+        encoding="utf-8",
+    )
+    victim_payload = tmp_path / "victim.json"
+    victim_payload.write_text("leaked", encoding="utf-8")
+
+    offloader = _offloader(offload_dir)
+    with pytest.raises(OffloadNotFoundError):
+        offloader.get_record(hostile_key)
+    with pytest.raises(OffloadNotFoundError):
+        offloader.read_chunk(hostile_key, 0)
+
+    # The planted files must still exist, untouched, proving they were never
+    # read back to the caller through the offload key.
+    assert victim_payload.read_text(encoding="utf-8") == "leaked"
+
+
 def test_list_records_reports_what_is_stored(tmp_path: Path) -> None:
     offloader = _offloader(tmp_path)
     offloader.maybe_offload("a" * 200)
