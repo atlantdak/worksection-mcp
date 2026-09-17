@@ -147,11 +147,11 @@ class UploadFileInput(BaseModel):
                 "upload_file needs exactly one of content_base64 (with filename) or "
                 "workspace_filename"
             )
+        if self.filename is not None and Path(self.filename).name != self.filename:
+            raise ValueError("filename must not contain a directory component")
         if inline:
             if not self.filename:
                 raise ValueError("filename is required when content_base64 is given")
-            if Path(self.filename).name != self.filename:
-                raise ValueError("filename must not contain a directory component")
             try:
                 decoded = base64.b64decode(self.content_base64 or "", validate=True)
             except (binascii.Error, ValueError) as exc:

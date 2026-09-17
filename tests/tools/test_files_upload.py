@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from tests.support import make_context
 from worksection_mcp.errors import PathNotAllowedError
 from worksection_mcp.tooling import dispatch
+from worksection_mcp.tools.files import MAX_UPLOAD_BYTES
 
 
 async def test_upload_from_base64_posts_multipart() -> None:
@@ -105,3 +106,34 @@ async def test_upload_rejects_a_filename_with_a_directory_component() -> None:
             "upload_file",
             {"project_id": 7, "task_id": 55, "filename": "../a.txt", "content_base64": "aGk="},
         )
+
+
+async def test_upload_rejects_a_traversal_filename_paired_with_workspace_filename(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "report.txt").write_text("contents", encoding="utf-8")
+    context, requests = make_context([], file_workspace_dir=str(tmp_path))
+    with pytest.raises(ValidationError):
+        await dispatch(
+            context,
+            "upload_file",
+            {
+                "project_id": 7,
+                "task_id": 55,
+                "workspace_filename": "report.txt",
+                "filename": "../../etc/passwd",
+            },
+        )
+    assert requests == []
+
+
+async def test_upload_refuses_an_oversized_file_from_the_workspace(tmp_path: Path) -> None:
+    (tmp_path / "huge.bin").write_bytes(b"x" * (MAX_UPLOAD_BYTES + 1))
+    context, requests = make_context([], file_workspace_dir=str(tmp_path))
+    with pytest.raises(ValueError, match="exceeds"):
+        await dispatch(
+            context,
+            "upload_file",
+            {"project_id": 7, "task_id": 55, "workspace_filename": "huge.bin"},
+        )
+    assert requests == []
