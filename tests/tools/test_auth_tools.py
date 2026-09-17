@@ -5,7 +5,8 @@ from typing import Any
 from tests.support import make_context
 from worksection_mcp.auth.base import PreparedRequest
 from worksection_mcp.auth.token_store import TokenSet
-from worksection_mcp.tooling import dispatch
+from worksection_mcp.config import load_settings
+from worksection_mcp.tooling import ToolContext, dispatch
 
 
 class FakeOAuth:
@@ -69,3 +70,45 @@ async def test_logout_clears_credentials() -> None:
     result: Any = await dispatch(context, "worksection_logout", {})
     assert auth.cleared is True
     assert result["cleared"] is True
+
+
+def _oauth_context(auth: Any | None) -> ToolContext:
+    settings = load_settings(
+        auth_mode="oauth",
+        oauth_client_id="client",
+        oauth_client_secret="secret",
+        fernet_key="fernet",
+    )
+    return ToolContext(settings=settings, client=object(), auth=auth)  # type: ignore[arg-type]
+
+
+async def test_auth_status_with_no_provider_reports_unauthenticated() -> None:
+    context = _oauth_context(None)
+    result: Any = await dispatch(context, "auth_status", {})
+    assert result["auth_mode"] == "oauth"
+    assert result["authenticated"] is False
+    assert result["login_required"] is True
+
+
+async def test_login_with_no_provider_is_refused() -> None:
+    context = _oauth_context(None)
+    result: Any = await dispatch(context, "worksection_login", {})
+    assert result["ok"] is False
+    assert "no OAuth provider" in result["detail"]
+
+
+async def test_logout_is_refused_in_admin_mode() -> None:
+    context, _ = make_context([])
+    result: Any = await dispatch(context, "worksection_logout", {})
+    assert result["cleared"] is False
+    assert "admin_key" in result["detail"]
+
+
+async def test_logout_with_a_provider_that_stores_no_tokens() -> None:
+    class NoLogoutProvider:
+        mode = "oauth"
+
+    context = _oauth_context(NoLogoutProvider())
+    result: Any = await dispatch(context, "worksection_logout", {})
+    assert result["cleared"] is False
+    assert "stores no tokens" in result["detail"]

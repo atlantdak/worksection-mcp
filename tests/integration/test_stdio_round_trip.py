@@ -8,6 +8,7 @@ loop started as a background task, and a client session layered on top.
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,7 @@ from mcp.server.lowlevel import Server
 from mcp.shared.memory import create_client_server_memory_streams
 
 from tests.support import make_context
+from worksection_mcp.offload import ResponseOffloader
 from worksection_mcp.server import build_server
 
 
@@ -61,3 +63,28 @@ async def test_client_can_list_and_call_tools(tmp_path: Path) -> None:
 
         called = await session.call_tool("get_projects", {})
         assert "Site" in called.content[0].text  # type: ignore[union-attr]
+
+
+@pytest.mark.anyio
+async def test_client_can_list_and_read_offloaded_resources(tmp_path: Path) -> None:
+    context, _requests = make_context(
+        [{"status": "ok", "data": [{"id": i} for i in range(500)]}],
+        state_dir=str(tmp_path / "state"),
+    )
+    context.offloader = ResponseOffloader(
+        tmp_path / "offload", threshold_bytes=200, chunk_bytes=100
+    )
+    server = build_server(context)
+    async with _connected_session(server) as session:
+        called = await session.call_tool("get_projects", {})
+        payload = json.loads(called.content[0].text)  # type: ignore[union-attr]
+        assert payload["offloaded"] is True
+
+        listed = await session.list_resources()
+        assert len(listed.resources) == 1
+        uri = str(listed.resources[0].uri)
+        assert uri == payload["resource_uri"]
+
+        read = await session.read_resource(uri)
+        contents = read.contents
+        assert json.loads(contents[0].text)[0] == {"id": 0}  # type: ignore[union-attr]

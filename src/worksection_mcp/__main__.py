@@ -19,5 +19,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - exercised only via `python -m`, not import
     sys.exit(main())
