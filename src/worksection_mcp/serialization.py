@@ -7,14 +7,22 @@ from typing import Any
 
 import mcp.types as types
 
+from worksection_mcp.offload import ResponseOffloader
+
 
 def _dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=False, default=repr)
 
 
-def render_result(value: Any) -> list[types.TextContent]:
-    """Render a tool result as a single text block."""
+def render_result(
+    value: Any, offloader: ResponseOffloader | None = None
+) -> list[types.TextContent]:
+    """Render a tool result, offloading it when it is too large to inline."""
     text = value if isinstance(value, str) else _dumps(value)
+    if offloader is not None:
+        record = offloader.maybe_offload(text)
+        if record is not None:
+            return [types.TextContent(type="text", text=_dumps(record.to_summary()))]
     return [types.TextContent(type="text", text=text)]
 
 

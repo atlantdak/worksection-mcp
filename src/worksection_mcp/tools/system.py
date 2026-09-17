@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from worksection_mcp import __version__, api_actions
+from worksection_mcp.errors import OffloadNotFoundError
+from worksection_mcp.offload import ResponseOffloader
 from worksection_mcp.preflight import check_configuration
 from worksection_mcp.tooling import ToolContext, tool
 
@@ -61,3 +63,25 @@ async def health_check(context: ToolContext, _args: NoArguments) -> dict[str, An
     report["api_reachable"] = True
     report["detail"] = "API responded successfully"
     return report
+
+
+class ReadOffloadedInput(BaseModel):
+    resource_uri: str = Field(
+        description="The worksection://offload/... URI from an offloaded response."
+    )
+    chunk_index: int = Field(default=0, ge=0, description="Zero-based chunk to read.")
+
+
+@tool(
+    name="read_offloaded_response",
+    description=(
+        "Read one bounded chunk of a response that was too large to return inline. "
+        "Use the resource_uri and total_chunks from the offload summary."
+    ),
+    input_model=ReadOffloadedInput,
+)
+async def read_offloaded_response(context: ToolContext, args: ReadOffloadedInput) -> dict[str, Any]:
+    if context.offloader is None:
+        raise OffloadNotFoundError("response offloading is not enabled")
+    key = ResponseOffloader.key_from_uri(args.resource_uri)
+    return context.offloader.read_chunk(key, args.chunk_index)

@@ -15,9 +15,10 @@ from worksection_mcp.auth.factory import build_auth_provider
 from worksection_mcp.cache.file_cache import FileCache
 from worksection_mcp.cache.session_cache import SessionCache
 from worksection_mcp.config import Settings, load_settings
-from worksection_mcp.errors import WorksectionError
+from worksection_mcp.errors import OffloadNotFoundError, WorksectionError
 from worksection_mcp.http.client import WorksectionClient
 from worksection_mcp.logging_setup import configure_logging, get_logger
+from worksection_mcp.offload import ResponseOffloader
 from worksection_mcp.serialization import render_error, render_result
 from worksection_mcp.tooling import ToolContext, dispatch, enabled_tool_specs
 
@@ -56,7 +57,29 @@ async def call_tool_payload(
     except Exception as exc:  # surfaced to the client as a text block, not swallowed
         logger.exception("tool %s raised an unexpected error", name)
         return render_error(exc)
-    return render_result(result)
+    return render_result(result, context.offloader)
+
+
+async def list_resources_payload(context: ToolContext) -> list[types.Resource]:
+    """Expose every offloaded response as a readable resource."""
+    if context.offloader is None:
+        return []
+    return [
+        types.Resource(
+            name=f"Offloaded response {record.key[:8]}",
+            uri=record.uri,
+            description=f"{record.size_bytes} bytes in {record.total_chunks} chunks",
+            mime_type="application/json",
+        )
+        for record in context.offloader.list_records()
+    ]
+
+
+async def read_resource_payload(context: ToolContext, uri: str) -> str:
+    """Return the full text of an offloaded response."""
+    if context.offloader is None:
+        raise OffloadNotFoundError("response offloading is not enabled")
+    return context.offloader.read_all(ResponseOffloader.key_from_uri(str(uri)))
 
 
 def build_server(context: ToolContext) -> Server[Any]:
@@ -77,11 +100,28 @@ def build_server(context: ToolContext) -> Server[Any]:
         content: list[types.ContentBlock] = [block for block in blocks]
         return types.CallToolResult(content=content)
 
+    async def _on_list_resources(
+        _ctx: Any, _params: types.PaginatedRequestParams | None
+    ) -> types.ListResourcesResult:
+        return types.ListResourcesResult(resources=await list_resources_payload(context))
+
+    async def _on_read_resource(
+        _ctx: Any, params: types.ReadResourceRequestParams
+    ) -> types.ReadResourceResult:
+        text = await read_resource_payload(context, params.uri)
+        return types.ReadResourceResult(
+            contents=[
+                types.TextResourceContents(uri=params.uri, mime_type="application/json", text=text)
+            ]
+        )
+
     return Server(
         SERVER_NAME,
         version=__version__,
         on_list_tools=_on_list_tools,
         on_call_tool=_on_call_tool,
+        on_list_resources=_on_list_resources,
+        on_read_resource=_on_read_resource,
     )
 
 
@@ -95,8 +135,18 @@ async def create_context(settings: Settings) -> ToolContext:
         ttl_seconds=settings.cache_ttl_seconds if settings.cache_enabled else 0,
         max_bytes=settings.file_cache_max_bytes,
     )
+    offloader = ResponseOffloader(
+        settings.offload_dir,
+        threshold_bytes=settings.offload_threshold_bytes,
+        chunk_bytes=settings.offload_chunk_bytes,
+    )
     return ToolContext(
-        settings=settings, client=client, auth=auth, cache=cache, file_cache=file_cache
+        settings=settings,
+        client=client,
+        auth=auth,
+        cache=cache,
+        file_cache=file_cache,
+        offloader=offloader,
     )
 
 

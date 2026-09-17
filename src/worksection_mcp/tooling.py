@@ -21,6 +21,7 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from worksection_mcp.cache.file_cache import FileCache
     from worksection_mcp.cache.session_cache import SessionCache
     from worksection_mcp.http.client import WorksectionClient
+    from worksection_mcp.offload import ResponseOffloader
 
 
 @dataclass
@@ -32,6 +33,7 @@ class ToolContext:
     auth: AuthProvider | None = None
     cache: SessionCache | None = None
     file_cache: FileCache | None = None
+    offloader: ResponseOffloader | None = None
 
 
 ToolHandler: TypeAlias = Callable[[ToolContext, Any], Awaitable[Any]]
