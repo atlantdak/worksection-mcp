@@ -14,7 +14,7 @@ search and reporting through a consistent set of tools.
 ## Install
 
 ```bash
-git clone https://github.com/<owner>/worksection-mcp.git
+git clone https://github.com/atlantdak/worksection-mcp.git
 cd worksection-mcp
 uv sync
 uv run worksection-mcp
