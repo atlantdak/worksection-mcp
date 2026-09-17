@@ -186,7 +186,7 @@ async def update_task(context: ToolContext, args: UpdateTaskInput) -> Any:
 
 @tool(
     name="complete_task",
-    description="Mark a task as done.",
+    description="Mark a task as done, closing it in Worksection.",
     input_model=TaskRefInput,
 )
 async def complete_task(context: ToolContext, args: TaskRefInput) -> Any:
