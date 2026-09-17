@@ -143,3 +143,38 @@ async def test_refresh_reports_a_revoked_grant() -> None:
             await refresh_tokens(
                 http, token_url=TOKEN, client_id="c", client_secret="s", refresh_token="rt"
             )
+
+
+async def test_exchange_code_does_not_leak_a_refresh_token_missing_an_access_token() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"refresh_token": "super-secret-refresh-value"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(AuthenticationError) as excinfo:
+            await exchange_code(
+                http,
+                token_url=TOKEN,
+                client_id="cid",
+                client_secret="csecret",
+                code="the-code",
+                redirect_uri="https://127.0.0.1:18030/callback",
+            )
+
+    assert "super-secret-refresh-value" not in str(excinfo.value)
+
+
+async def test_refresh_tokens_does_not_leak_a_refresh_token_missing_an_access_token() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"refresh_token": "super-secret-refresh-value"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(AuthenticationError) as excinfo:
+            await refresh_tokens(
+                http,
+                token_url=TOKEN,
+                client_id="cid",
+                client_secret="csecret",
+                refresh_token="rt",
+            )
+
+    assert "super-secret-refresh-value" not in str(excinfo.value)

@@ -17,6 +17,22 @@ from worksection_mcp.errors import AuthenticationError
 STATE_BYTES = 32
 DEFAULT_EXPIRES_IN = 3600.0
 
+# Substrings that mark a token-response field as credential-shaped. Any key
+# containing one of these (case-insensitive) is redacted before a payload is
+# ever folded into an exception message, since that message can end up in a
+# log line written by code far away from this module.
+_SENSITIVE_KEY_MARKERS = ("token", "secret", "password", "key")
+
+
+def _redact(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of a token-endpoint payload with credential-shaped values hidden."""
+    return {
+        key: "<redacted>"
+        if any(marker in key.lower() for marker in _SENSITIVE_KEY_MARKERS)
+        else value
+        for key, value in payload.items()
+    }
+
 
 @dataclass(frozen=True)
 class AuthorizationRequest:
@@ -61,7 +77,7 @@ def verify_state(expected: str, received: str | None) -> None:
 def _token_set(payload: dict[str, Any], now: float, fallback_refresh: str | None) -> TokenSet:
     access_token = payload.get("access_token")
     if not access_token:
-        raise AuthenticationError(f"token endpoint returned no access_token: {payload!r}")
+        raise AuthenticationError(f"token endpoint returned no access_token: {_redact(payload)!r}")
     expires_in = float(payload.get("expires_in") or DEFAULT_EXPIRES_IN)
     return TokenSet(
         access_token=str(access_token),
@@ -87,7 +103,12 @@ async def _post_token_request(
             f"token endpoint returned a non-JSON body (HTTP {response.status_code})"
         ) from exc
     if response.status_code >= 400 or "error" in payload:
-        detail = payload.get("error_description") or payload.get("error") or response.text[:200]
+        detail: object = payload.get("error_description") or payload.get("error")
+        if detail is None:
+            # No conventional error field; fall back to the payload itself,
+            # with any credential-shaped values redacted, rather than the raw
+            # response text (which could just as easily echo a token back).
+            detail = _redact(payload) if payload else response.text[:200]
         raise AuthenticationError(f"token request failed: {detail}")
     return dict(payload)
 
