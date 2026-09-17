@@ -6,6 +6,6 @@ sync when adding a module, and keep the imports alphabetical.
 
 from __future__ import annotations
 
-from worksection_mcp.tools import comments, projects, subtasks, system, tasks
+from worksection_mcp.tools import comments, projects, subtasks, system, tags, tasks
 
-__all__ = ["comments", "projects", "subtasks", "system", "tasks"]
+__all__ = ["comments", "projects", "subtasks", "system", "tags", "tasks"]
