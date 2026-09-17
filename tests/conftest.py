@@ -3,6 +3,11 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
 @pytest.fixture(autouse=True)
 def _isolate_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep real credentials out of the test process."""
