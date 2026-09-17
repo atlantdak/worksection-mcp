@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -74,3 +75,48 @@ def test_key_from_uri(tmp_path: Path) -> None:
     assert ResponseOffloader.key_from_uri(f"{OFFLOAD_URI_PREFIX}abc123") == "abc123"
     with pytest.raises(OffloadNotFoundError):
         ResponseOffloader.key_from_uri("https://example.test/abc")
+
+
+def test_reading_one_chunk_does_not_read_the_whole_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A chunk request must only ever pull its own bytes off disk.
+
+    Reading the whole payload just to hand back one slice would defeat the
+    entire point of chunking a large response: memory use and disk IO would
+    scale with the total payload size instead of the chunk size.
+    """
+    chunk_size = 1024
+    offloader = _offloader(tmp_path, threshold=100, chunk=chunk_size)
+    payload = "a" * (5 * 1024 * 1024)  # 5 MiB, far larger than one chunk
+    record = offloader.maybe_offload(payload)
+    assert record is not None
+    assert record.total_chunks > 1
+
+    bytes_read_from_payload_file: list[int] = []
+    real_open: Any = Path.open
+
+    def spy_open(self: Path, *args: Any, **kwargs: Any) -> Any:
+        handle = real_open(self, *args, **kwargs)
+        if self == record.path:
+            original_read = handle.read
+
+            def spy_read(size: int = -1, /) -> bytes:
+                data: bytes = original_read(size)
+                bytes_read_from_payload_file.append(len(data))
+                return data
+
+            handle.read = spy_read
+        return handle
+
+    monkeypatch.setattr(Path, "open", spy_open)
+
+    chunk = offloader.read_chunk(record.key, 2)
+
+    assert chunk["chunk_index"] == 2
+    assert len(chunk["text"]) <= chunk_size
+    # Only the requested chunk's bytes were ever pulled off the payload
+    # file - nowhere near the 5 MiB the naive "read the whole file" approach
+    # would have to load.
+    assert bytes_read_from_payload_file, "expected the payload file to be read at least once"
+    assert sum(bytes_read_from_payload_file) <= chunk_size

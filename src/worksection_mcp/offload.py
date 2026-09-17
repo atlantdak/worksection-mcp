@@ -117,7 +117,20 @@ class ResponseOffloader:
         payload_path = self._payload_path(key)
         write_secret_file(payload_path, encoded)
 
-        total_chunks = max(1, -(-len(text) // self._chunk))
+        total_chars = len(text)
+        total_chunks = max(1, -(-total_chars // self._chunk))
+        # Chunk boundaries are chosen by character offset (so a client sees
+        # the same chunking regardless of encoding), but the byte offset of
+        # each boundary is precomputed once here and stored alongside the
+        # record. That lets read_chunk seek straight to a chunk's bytes on
+        # disk later instead of decoding the whole file on every call.
+        chunk_byte_offsets = [0]
+        for chunk_index in range(total_chunks):
+            char_start = chunk_index * self._chunk
+            char_end = min(total_chars, char_start + self._chunk)
+            chunk_bytes = len(text[char_start:char_end].encode("utf-8"))
+            chunk_byte_offsets.append(chunk_byte_offsets[-1] + chunk_bytes)
+
         record = OffloadRecord(
             key=key,
             uri=f"{OFFLOAD_URI_PREFIX}{key}",
@@ -135,19 +148,24 @@ class ResponseOffloader:
                 "total_chunks": total_chunks,
                 "created_at": record.created_at,
                 "preview": record.preview,
+                "chunk_byte_offsets": chunk_byte_offsets,
             }
         ).encode("utf-8")
         write_secret_file(meta_path, meta_bytes)
         logger.info("offloaded a %d byte response to %s", size, record.uri)
         return record
 
-    def get_record(self, key: str) -> OffloadRecord:
+    def _load_meta(self, key: str) -> dict[str, Any]:
         key = self._require_valid_key(key)
         meta_path = self._meta_path(key)
         try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            meta: dict[str, Any] = json.loads(meta_path.read_text(encoding="utf-8"))
         except (FileNotFoundError, json.JSONDecodeError) as exc:
             raise OffloadNotFoundError(f"no offloaded response with key {key!r}") from exc
+        return meta
+
+    def get_record(self, key: str) -> OffloadRecord:
+        meta = self._load_meta(key)
         return OffloadRecord(
             key=key,
             uri=f"{OFFLOAD_URI_PREFIX}{key}",
@@ -159,20 +177,36 @@ class ResponseOffloader:
         )
 
     def read_chunk(self, key: str, index: int) -> dict[str, Any]:
-        """Return one bounded slice of an offloaded response."""
-        record = self.get_record(key)
-        if index < 0 or index >= record.total_chunks:
+        """Return one bounded slice of an offloaded response.
+
+        Only the bytes belonging to this chunk are ever read from disk: the
+        byte range for each chunk was computed once in :meth:`maybe_offload`
+        and stored in the metadata file, so this seeks straight to it
+        instead of loading the whole (possibly huge) payload into memory.
+        """
+        key = self._require_valid_key(key)
+        meta = self._load_meta(key)
+        total_chunks = int(meta["total_chunks"])
+        if index < 0 or index >= total_chunks:
             raise OffloadNotFoundError(
-                f"chunk {index} is out of range; this response has {record.total_chunks} chunks"
+                f"chunk {index} is out of range; this response has {total_chunks} chunks"
             )
-        text = record.path.read_text(encoding="utf-8")
-        start = index * self._chunk
+        offsets = meta["chunk_byte_offsets"]
+        start_byte = int(offsets[index])
+        end_byte = int(offsets[index + 1])
+        payload_path = self._payload_path(key)
+        try:
+            with payload_path.open("rb") as handle:
+                handle.seek(start_byte)
+                raw = handle.read(end_byte - start_byte)
+        except FileNotFoundError as exc:
+            raise OffloadNotFoundError(f"no offloaded response with key {key!r}") from exc
         return {
-            "resource_uri": record.uri,
+            "resource_uri": f"{OFFLOAD_URI_PREFIX}{key}",
             "chunk_index": index,
-            "total_chunks": record.total_chunks,
-            "has_more": index < record.total_chunks - 1,
-            "text": text[start : start + self._chunk],
+            "total_chunks": total_chunks,
+            "has_more": index < total_chunks - 1,
+            "text": raw.decode("utf-8"),
         }
 
     def read_all(self, key: str) -> str:
