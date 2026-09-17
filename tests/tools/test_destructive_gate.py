@@ -43,3 +43,16 @@ async def test_delete_task_calls_the_api_when_enabled() -> None:
     await dispatch(context, "delete_task", {"project_id": 7, "task_id": 55, "confirm": True})
     assert requests[0].url.params["action"] == "delete_task"
     assert requests[0].url.params["page"] == "/project/7/55/"
+
+
+async def test_delete_comment_is_absent_from_the_tool_list_by_default() -> None:
+    context, _ = make_context([])
+    names = {item.name for item in await list_tools_payload(context)}
+    assert "delete_comment" not in names
+    assert "get_comments" in names
+
+
+async def test_delete_comment_is_listed_when_explicitly_enabled() -> None:
+    context, _ = make_context([], allow_destructive_operations=True)
+    names = {item.name for item in await list_tools_payload(context)}
+    assert "delete_comment" in names
