@@ -1,0 +1,27 @@
+# Internal planning docs — never pushed to this public repo
+docs/superpowers/
+.superpowers/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Secrets & local state
+.env
+*.enc
+*.pem
+*.key
+tokens.json
+data/
+
+# OS
+.DS_Store
